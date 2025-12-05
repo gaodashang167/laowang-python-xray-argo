@@ -468,11 +468,44 @@ def send_telegram():
 
 # Generate links and subscription content
 async def generate_links(argo_domain):
-    meta_info = subprocess.run(['curl', '-s', 'https://speed.cloudflare.com/meta'], capture_output=True, text=True)
-    meta_info = meta_info.stdout.split('"')
-    ISP = f"{meta_info[25]}-{meta_info[17]}".replace(' ', '_').strip()
+    ISP = "Unknown-ISP"
+    
+    try:
+        # 获取元信息，添加超时控制
+        result = subprocess.run(['curl', '-s', 'https://speed.cloudflare.com/meta'], 
+                               capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0 and result.stdout:
+            meta_info_list = result.stdout.split('"')
+            print(f"Debug: meta_info length = {len(meta_info_list)}")
+            
+            # 安全地提取ISP信息
+            if len(meta_info_list) > 25 and len(meta_info_list) > 17:
+                colo = meta_info_list[25].strip()
+                country = meta_info_list[17].strip()
+                
+                if colo and country:
+                    ISP = f"{colo}-{country}".replace(' ', '_').strip()
+                    print(f"Successfully extracted ISP: {ISP}")
+                else:
+                    print("Warning: ISP data is empty, using fallback")
+                    ISP = "Default-ISP"
+            else:
+                print(f"Warning: meta_info array too short, expected >25 elements, got {len(meta_info_list)}")
+                ISP = "Default-ISP"
+        else:
+            print(f"Warning: Failed to fetch metadata, return code: {result.returncode}")
+            ISP = "Default-ISP"
+            
+    except subprocess.TimeoutExpired:
+        print("Warning: curl request timeout, using fallback ISP")
+        ISP = "Default-ISP"
+    except Exception as e:
+        print(f"Warning: Error fetching meta info: {e}")
+        ISP = "Default-ISP"
 
     time.sleep(2)
+    
     VMESS = {"v": "2", "ps": f"{NAME}-{ISP}", "add": CFIP, "port": CFPORT, "id": UUID, "aid": "0", "scy": "none", "net": "ws", "type": "none", "host": argo_domain, "path": "/vmess-argo?ed=2560", "tls": "tls", "sni": argo_domain, "alpn": "", "fp": "chrome"}
  
     list_txt = f"""
