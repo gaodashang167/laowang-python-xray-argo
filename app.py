@@ -73,8 +73,13 @@ def signal_handler(signum, frame):
     cleanup_processes()
     sys.exit(0)
 
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
+# 只在支持信号的环境中注册信号处理器
+try:
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+except (AttributeError, ValueError, OSError):
+    # Streamlit Cloud或Windows等环境可能不支持某些信号
+    print("Signal handlers not available in this environment")
 
 # Create running folder
 def create_directory():
@@ -301,14 +306,19 @@ ingress:
 def exec_cmd(command):
     """执行shell命令"""
     try:
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=os.setsid if os.name != 'nt' else None
-        )
+        # 检查是否支持preexec_fn (Unix-like系统)
+        kwargs = {
+            'shell': True,
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE,
+            'text': True
+        }
+        
+        # 只在Unix系统上使用preexec_fn
+        if hasattr(os, 'setsid'):
+            kwargs['preexec_fn'] = os.setsid
+        
+        process = subprocess.Popen(command, **kwargs)
         running_processes.append(process)
         stdout, stderr = process.communicate(timeout=30)
         return stdout + stderr
@@ -323,13 +333,18 @@ def exec_cmd(command):
 def start_background_process(command, process_name):
     """启动后台进程"""
     try:
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid if os.name != 'nt' else None
-        )
+        # 检查是否支持preexec_fn (Unix-like系统)
+        kwargs = {
+            'shell': True,
+            'stdout': subprocess.DEVNULL,
+            'stderr': subprocess.DEVNULL
+        }
+        
+        # 只在Unix系统上使用preexec_fn
+        if hasattr(os, 'setsid'):
+            kwargs['preexec_fn'] = os.setsid
+        
+        process = subprocess.Popen(command, **kwargs)
         running_processes.append(process)
         print(f'{process_name} is running (PID: {process.pid})')
         return process
@@ -344,7 +359,10 @@ def cleanup_processes():
         try:
             if process.poll() is None:  # Process is still running
                 process.terminate()
-                process.wait(timeout=5)
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
         except Exception as e:
             print(f"Error terminating process: {e}")
             try:
