@@ -1,3 +1,5 @@
+_RESTART_TIMESTAMP = 1770904804  # Thu Feb 12 14:00:04 UTC 2026
+
 import os
 import re
 import json
