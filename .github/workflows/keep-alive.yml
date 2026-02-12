@@ -1,13 +1,16 @@
-name: Auto Restart (Simple)
+name: Smart Restart
+
+# 这个方案通过修改一个虚拟的版本号来触发重启
+# 不会在代码中累积垃圾注释
 
 on:
   schedule:
-    # 每3小时执行一次
-    - cron: '0 */3 * * *'
+    # 每4小时执行一次
+    - cron: '0 */4 * * *'
   workflow_dispatch:
 
 jobs:
-  restart:
+  smart-restart:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -15,15 +18,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Trigger restart
+      - name: Update restart version
         run: |
-          # 简单粗暴：在README或任意文件添加时间戳
-          echo "Last auto-restart: $(date)" >> README.md
+          echo "🔄 Updating restart trigger..."
           
+          # 创建或更新一个专门的版本文件
+          mkdir -p .streamlit
+          
+          # 获取当前重启次数
+          if [ -f ".streamlit/restart_version.txt" ]; then
+            current=$(cat .streamlit/restart_version.txt)
+          else
+            current=0
+          fi
+          
+          # 递增版本号
+          next=$((current + 1))
+          echo $next > .streamlit/restart_version.txt
+          
+          # 在 requirements.txt 末尾添加一个虚拟版本号
+          # Streamlit 会检测到 requirements.txt 变化并完全重启
+          if [ -f "requirements.txt" ]; then
+            # 先删除旧的版本行
+            grep -v "^# restart-version:" requirements.txt > requirements.txt.tmp || true
+            mv requirements.txt.tmp requirements.txt
+            
+            # 添加新的版本行
+            echo "# restart-version: $next" >> requirements.txt
+            echo "✅ Updated to restart version $next"
+          else
+            echo "⚠️ requirements.txt not found"
+          fi
+      
       - name: Commit & Push
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add .
-          git commit -m "Auto-restart $(date '+%Y-%m-%d %H:%M')"
+          git config user.name "restart-bot"
+          git config user.email "restart-bot@users.noreply.github.com"
+          
+          git add .streamlit/restart_version.txt
+          if [ -f "requirements.txt" ]; then
+            git add requirements.txt
+          fi
+          
+          version=$(cat .streamlit/restart_version.txt)
+          git commit -m "🔄 Restart v${version}: $(date '+%Y-%m-%d %H:%M UTC')"
           git push
+          
+          echo "✅ Pushed restart trigger v${version}"
+          echo "📱 Streamlit Cloud will detect the change and restart"
+      
+      - name: Wait and verify
+        if: vars.APP_URL != ''
+        run: |
+          echo "⏳ Waiting 2 minutes for restart..."
+          sleep 120
+          
+          if curl -f -s "${{ vars.APP_URL }}" > /dev/null; then
+            echo "✅ App is responding!"
+          else
+            echo "⚠️ App check failed (might still be restarting)"
+          fi
