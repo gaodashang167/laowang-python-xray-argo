@@ -1,0 +1,58 @@
+name: Restart Streamlit App
+
+on:
+  schedule:
+    # 每6小时重启一次
+    - cron: '0 */6 * * *'
+  
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  restart-streamlit:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Trigger Streamlit Cloud restart
+        env:
+          STREAMLIT_API_KEY: ${{ secrets.STREAMLIT_API_KEY }}
+          APP_URL: ${{ secrets.STREAMLIT_APP_URL }}
+        run: |
+          echo "Restarting Streamlit app at $(date)"
+          
+          # 方法1: 通过 Streamlit Cloud API 重启
+          if [ -n "$STREAMLIT_API_KEY" ]; then
+            curl -X POST "https://share.streamlit.io/api/v1/apps/restart" \
+              -H "Authorization: Bearer $STREAMLIT_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{"app_url": "'"$APP_URL"'"}'
+          fi
+          
+          # 方法2: 通过修改仓库触发重新部署
+          # Streamlit Cloud 会监听 main 分支的变化
+          date > .streamlit_restart_timestamp
+          git config --local user.email "bot@github.com"
+          git config --local user.name "Restart Bot"
+          git add .streamlit_restart_timestamp
+          git commit -m "🔄 Auto restart: $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
+          
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+      
+      - name: Wait and verify
+        run: |
+          echo "Waiting for app to restart..."
+          sleep 90
+          
+          # 健康检查
+          if [ -n "${{ secrets.APP_URL }}" ]; then
+            curl -f "${{ secrets.APP_URL }}/health" || echo "Health check skipped"
+          fi
+          
+          echo "✅ Restart workflow completed"
