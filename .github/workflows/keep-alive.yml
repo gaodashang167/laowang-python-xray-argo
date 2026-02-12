@@ -1,16 +1,12 @@
-name: Smart Restart
-
-# 这个方案通过修改一个虚拟的版本号来触发重启
-# 不会在代码中累积垃圾注释
+name: Simple Force Restart
 
 on:
   schedule:
-    # 每4小时执行一次
     - cron: '0 */4 * * *'
   workflow_dispatch:
 
 jobs:
-  smart-restart:
+  restart:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,63 +14,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Update restart version
+      - name: Add timestamp to trigger restart
         run: |
-          echo "🔄 Updating restart trigger..."
+          echo "⏰ Adding timestamp to app.py..."
           
-          # 创建或更新一个专门的版本文件
-          mkdir -p .streamlit
+          # 在 app.py 第一行插入一个时间戳变量
+          # Python 文件内容改变 = 完全重启
           
-          # 获取当前重启次数
-          if [ -f ".streamlit/restart_version.txt" ]; then
-            current=$(cat .streamlit/restart_version.txt)
+          timestamp=$(date +%s)
+          
+          # 检查是否已存在时间戳
+          if grep -q "_RESTART_TIMESTAMP" app.py; then
+            # 更新现有时间戳
+            sed -i "s/_RESTART_TIMESTAMP = .*/_RESTART_TIMESTAMP = $timestamp  # $(date)/" app.py
+            echo "✅ Updated timestamp to $timestamp"
           else
-            current=0
+            # 添加新的时间戳（在第一个 import 之前）
+            sed -i "1i_RESTART_TIMESTAMP = $timestamp  # $(date)\n" app.py
+            echo "✅ Added new timestamp $timestamp"
           fi
           
-          # 递增版本号
-          next=$((current + 1))
-          echo $next > .streamlit/restart_version.txt
-          
-          # 在 requirements.txt 末尾添加一个虚拟版本号
-          # Streamlit 会检测到 requirements.txt 变化并完全重启
-          if [ -f "requirements.txt" ]; then
-            # 先删除旧的版本行
-            grep -v "^# restart-version:" requirements.txt > requirements.txt.tmp || true
-            mv requirements.txt.tmp requirements.txt
-            
-            # 添加新的版本行
-            echo "# restart-version: $next" >> requirements.txt
-            echo "✅ Updated to restart version $next"
-          else
-            echo "⚠️ requirements.txt not found"
-          fi
+          echo "🔥 Modified app.py - Full restart triggered!"
       
       - name: Commit & Push
         run: |
-          git config user.name "restart-bot"
-          git config user.email "restart-bot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add .streamlit/restart_version.txt
-          if [ -f "requirements.txt" ]; then
-            git add requirements.txt
-          fi
-          
-          version=$(cat .streamlit/restart_version.txt)
-          git commit -m "🔄 Restart v${version}: $(date '+%Y-%m-%d %H:%M UTC')"
+          git add app.py
+          git commit -m "🔄 Auto-restart: $(date '+%Y-%m-%d %H:%M:%S')"
           git push
           
-          echo "✅ Pushed restart trigger v${version}"
-          echo "📱 Streamlit Cloud will detect the change and restart"
-      
-      - name: Wait and verify
-        if: vars.APP_URL != ''
-        run: |
-          echo "⏳ Waiting 2 minutes for restart..."
-          sleep 120
-          
-          if curl -f -s "${{ vars.APP_URL }}" > /dev/null; then
-            echo "✅ App is responding!"
-          else
-            echo "⚠️ App check failed (might still be restarting)"
-          fi
+          echo "✅ Pushed! Streamlit will now FULLY restart the app!"
