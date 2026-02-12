@@ -7,3 +7,4 @@ asyncio==3.4.3
 
 # 如果需要更好的异步HTTP支持(可选)
 # aiohttp==3.9.1
+# restart-version: 1
