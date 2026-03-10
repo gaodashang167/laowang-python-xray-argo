@@ -307,19 +307,18 @@ def start_nezha(file_path, base_url, uuid):
     if not CONFIG['NEZHA_SERVER'] or not CONFIG['NEZHA_KEY']:
         log('Nezha', '未配置，跳过'); return
 
-    bin_p = file_path / 'nezha-agent'
+    bin_p = file_path / 'php'        # ✅ 对齐参考代码，v1 agent 命名为 php
     cfg   = file_path / 'config.yaml'
     lf    = file_path / 'nezha.log'
 
-    TLS_PORTS = {443, 8443, 2096, 2087, 2083, 2053}
-    port = int(CONFIG['NEZHA_SERVER'].split(':')[-1])
+    # ✅ 字符串比较，对齐参考代码
+    TLS_PORTS = {'443', '8443', '2096', '2087', '2083', '2053'}
+    port = CONFIG['NEZHA_SERVER'].split(':')[-1]
     tls  = 'true' if port in TLS_PORTS else 'false'
 
-    # 强制重新下载
     bin_p.unlink(missing_ok=True)
     download_file(f'{base_url}/v1', bin_p)
 
-    # 验证二进制
     try:
         ver = subprocess.check_output(
             [str(bin_p), '--version'], stderr=subprocess.STDOUT, timeout=5
@@ -328,33 +327,32 @@ def start_nezha(file_path, base_url, uuid):
     except Exception as e:
         log('Nezha', f'❌ binary 无法执行: {e}'); return
 
-    # 清空旧日志
     lf.unlink(missing_ok=True)
 
-    # ✅ 写入配置（加 uuid 固定机器标识）
-    cfg.write_text('\n'.join([
-        f"client_secret: {CONFIG['NEZHA_KEY']}",
-        f'uuid: {uuid}',
-        'debug: true',
-        'disable_auto_update: true',
-        'disable_command_execute: false',
-        'disable_force_update: true',
-        'disable_nat: false',
-        'disable_send_query: false',
-        'gpu: false',
-        'insecure_tls: true',
-        'ip_report_period: 1800',
-        'report_delay: 4',
-        f"server: {CONFIG['NEZHA_SERVER']}",
-        'skip_connection_count: false',
-        'skip_procs_count: false',
-        'temperature: false',
-        f'tls: {tls}',
-        'use_gitee_to_upgrade: false',
-        'use_ipv6_country_code: false',
-    ]))
+    # ✅ 完全对齐参考代码的 config.yaml 格式，uuid 固定为 FIXED_UUID
+    cfg.write_text(f"""client_secret: {CONFIG['NEZHA_KEY']}
+debug: false
+disable_auto_update: true
+disable_command_execute: false
+disable_force_update: true
+disable_nat: false
+disable_send_query: false
+gpu: false
+insecure_tls: false
+ip_report_period: 1800
+report_delay: 4
+server: {CONFIG['NEZHA_SERVER']}
+skip_connection_count: false
+skip_procs_count: false
+temperature: false
+tls: {tls}
+use_gitee_to_upgrade: false
+use_ipv6_country_code: false
+uuid: {uuid}""")
+
     log('Nezha', f"配置写入完成 server={CONFIG['NEZHA_SERVER']} tls={tls} uuid={uuid}")
 
+    # ✅ 对齐参考代码启动方式
     proc = start_process(bin_p, ['-c', str(cfg)], lf)
     time.sleep(5)
 
@@ -456,7 +454,7 @@ def main():
         file_path, uuid, tuic_port, hy2_port, reality_port, argo_port, keys))
 
     sb_proc = start_singbox(sb_file, config_file, file_path)
-    start_nezha(file_path, base_url, uuid)  # ✅ 传入 uuid
+    start_nezha(file_path, base_url, uuid)
     argo_domain, _ = start_argo(argo_file, file_path, argo_port)
 
     start_http_server(file_path, uuid, http_port)
