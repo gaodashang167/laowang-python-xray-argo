@@ -18,7 +18,7 @@ CONFIG = {
     'HY2_PORT_FIXED':    0,
     'HTTP_PORT_FIXED':   0,
 
-    'NEZHA_SERVER':      'nzmb.id.ccwu.cc:443',
+    'NEZHA_SERVER':      'nzmbv.wuge.nyc.mn:443',
     'NEZHA_KEY':         'gUxNJhaKJgceIgeapZG4956rmKFgmQgP',
     'CF_DOMAINS': [
         'cf.090227.xyz', 'cf.877774.xyz', 'cf.130519.xyz',
